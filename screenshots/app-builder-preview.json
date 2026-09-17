@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Spooled",
+      "hasCanvas": false,
+      "bodyTextLen": 663,
+      "bodyTextHash": "f8195a3fbaf941f2d7bd7c1957c805535f1dd601fffb7e4281fc03804eb6a47b",
+      "bodyTextPrefix": "Spooled Personal offline copies YOUTUBE TO YOUR DEVICE Save the ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Spooled",
+      "hasCanvas": false,
+      "bodyTextLen": 639,
+      "bodyTextHash": "2e28d7c7b47072d3cf8755e72791036cc8edf785f6a1919856de3210f3e13ed7",
+      "bodyTextPrefix": "Spooled YOUTUBE TO YOUR DEVICE Save the video. Keep the file. Pa",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
