@@ -1,13 +1,13 @@
 import { i as __toESM, n as __exportAll } from "../_runtime.mjs";
 import { n as extractVideoId, r as safeFilename, t as extensionFor } from "./youtube-BeaFxecg.mjs";
-import { t as openFormatStream } from "./youtube.server-CoYXWsVI.mjs";
+import { t as openFormatStream } from "./youtube.server-BSzz7Zri.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { _ as createRootRoute, d as HeadContent, g as createFileRoute, h as lazyRouteComponent, m as Outlet, p as createRouter, u as Scripts, v as useRouter, y as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { t as Toaster } from "../_libs/sonner.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-CQNVxwts.js
-var router_CQNVxwts_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
+//#region node_modules/.nitro/vite/services/ssr/assets/router-BFcP1-b2.js
+var router_BFcP1_b2_exports = /* @__PURE__ */ __exportAll({ getRouter: () => getRouter });
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
@@ -301,7 +301,7 @@ function PreviewHostBridge() {
 	}, [router]);
 	return null;
 }
-var styles_default = "/assets/styles-LFJ0R8Eq.css";
+var styles_default = "/assets/styles-CX5TIslp.css";
 var APP_NAME = "Spooled";
 var Route$2 = createRootRoute({
 	head: () => ({
@@ -373,7 +373,7 @@ var Route$2 = createRootRoute({
 		})]
 	})
 });
-var $$splitComponentImporter = () => import("./routes-Bzq7IL5P.mjs");
+var $$splitComponentImporter = () => import("./routes-Bg95qKmn.mjs");
 var Route$1 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 function asciiFilename(name) {
 	return name.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "");
@@ -386,10 +386,12 @@ function disposition(filename, attachment) {
 function asVideoFormat(format) {
 	const kind = format.has_audio && format.has_video ? "combined" : format.has_audio ? "audio" : "video";
 	const container = format.mime_type.includes("webm") ? "webm" : format.mime_type.includes("audio/mp4") ? "m4a" : "mp4";
+	const audio = (format.audio_quality ?? "").replace("AUDIO_QUALITY_", "").toLowerCase();
+	const audioLabel = audio ? audio.charAt(0).toUpperCase() + audio.slice(1) : String(format.itag);
 	return {
 		itag: format.itag,
 		kind,
-		label: format.quality_label ?? format.audio_quality ?? String(format.itag),
+		label: format.quality_label ?? audioLabel,
 		container,
 		codecs: "",
 		mimeType: format.mime_type,
@@ -403,39 +405,42 @@ function asVideoFormat(format) {
 		recommended: false
 	};
 }
+function parseRange(header) {
+	if (!header) return void 0;
+	const match = /^bytes=(\d+)-(\d+)?$/i.exec(header.trim());
+	if (!match) return void 0;
+	return {
+		start: Number(match[1]),
+		end: match[2] ? Number(match[2]) : void 0
+	};
+}
 async function handleDownload({ request }) {
 	const url = new URL(request.url);
 	const videoId = url.searchParams.get("v") ?? "";
 	const itag = Number(url.searchParams.get("itag"));
 	const attachment = url.searchParams.get("dl") === "1";
 	if (!extractVideoId(videoId) || !Number.isInteger(itag) || itag <= 0) return Response.json({ error: "Missing video or quality." }, { status: 400 });
+	const range = parseRange(request.headers.get("range"));
 	try {
-		const opened = await openFormatStream(videoId, itag);
-		const headers = { ...opened.headers };
-		const range = request.headers.get("range");
-		if (range) headers.range = range;
-		const upstream = await fetch(opened.url, { headers });
-		if (!upstream.ok && upstream.status !== 206) return Response.json({ error: "YouTube refused the file stream. Try fetching the video again." }, { status: 502 });
+		const opened = await openFormatStream(videoId, itag, range);
 		const format = asVideoFormat(opened.format);
 		const filename = safeFilename(opened.title, format);
-		const mime = upstream.headers.get("content-type") ?? (format.kind === "audio" ? format.container === "webm" ? "audio/webm" : "audio/mp4" : format.container === "webm" ? "video/webm" : "video/mp4");
+		const mime = opened.contentType?.split(";")[0] || format.mimeType.split(";")[0] || "application/octet-stream";
 		const out = new Headers();
 		out.set("content-type", mime);
 		out.set("content-disposition", disposition(filename, attachment));
 		out.set("cache-control", "no-store");
-		out.set("accept-ranges", upstream.headers.get("accept-ranges") ?? "bytes");
-		const length = upstream.headers.get("content-length");
-		if (length) out.set("content-length", length);
-		const contentRange = upstream.headers.get("content-range");
-		if (contentRange) out.set("content-range", contentRange);
 		out.set("x-spooled-filename", encodeURIComponent(filename));
 		out.set("x-spooled-ext", extensionFor(format));
+		if (opened.contentLength) out.set("content-length", opened.contentLength);
+		if (opened.contentRange) out.set("content-range", opened.contentRange);
+		out.set("accept-ranges", "bytes");
 		if (request.method === "HEAD") return new Response(null, {
-			status: upstream.status,
+			status: opened.status,
 			headers: out
 		});
-		return new Response(upstream.body, {
-			status: upstream.status,
+		return new Response(opened.stream, {
+			status: opened.status,
 			headers: out
 		});
 	} catch (error) {
@@ -467,4 +472,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { getRouter, router_CQNVxwts_exports as t };
+export { getRouter, router_BFcP1_b2_exports as t };

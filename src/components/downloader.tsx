@@ -25,7 +25,7 @@ import {
   type VideoInfoPayload,
 } from "@/lib/youtube";
 
-const EXAMPLE_URL = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+const EXAMPLE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
 type DownloadState = {
   itag: number;
@@ -65,6 +65,7 @@ export function Downloader() {
   const [recent, setRecent] = useState<RecentItem[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const [download, setDownload] = useState<DownloadState | null>(null);
+  const [doneItag, setDoneItag] = useState<number | null>(null);
   const [showHighRes, setShowHighRes] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -94,6 +95,7 @@ export function Downloader() {
     setPreviewing(false);
     setDownload(null);
     setDoneItag(null);
+    setShowHighRes(false);
 
     try {
       const payload = await lookupVideo({ data: { url: trimmed } });
@@ -410,7 +412,7 @@ export function Downloader() {
             void fetchInfo(EXAMPLE_URL);
           }}
         >
-          Try Big Buck Bunny
+          Try a sample clip
         </Button>
       </div>
 

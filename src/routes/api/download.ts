@@ -26,10 +26,12 @@ function asVideoFormat(format: {
     : format.mime_type.includes("audio/mp4")
       ? "m4a"
       : "mp4";
+  const audio = (format.audio_quality ?? "").replace("AUDIO_QUALITY_", "").toLowerCase();
+  const audioLabel = audio ? audio.charAt(0).toUpperCase() + audio.slice(1) : String(format.itag);
   return {
     itag: format.itag,
     kind,
-    label: format.quality_label ?? format.audio_quality ?? String(format.itag),
+    label: format.quality_label ?? audioLabel,
     container,
     codecs: "",
     mimeType: format.mime_type,
@@ -67,8 +69,10 @@ async function handleDownload({ request }: { request: Request }) {
     const opened = await openFormatStream(videoId, itag, range);
     const format = asVideoFormat(opened.format);
     const filename = safeFilename(opened.title, format);
-    const mime = format.mimeType.split(";")[0] || "application/octet-stream";
-    const total = opened.format.content_length;
+    const mime =
+      opened.contentType?.split(";")[0] ||
+      format.mimeType.split(";")[0] ||
+      "application/octet-stream";
 
     const out = new Headers();
     out.set("content-type", mime);
@@ -76,25 +80,15 @@ async function handleDownload({ request }: { request: Request }) {
     out.set("cache-control", "no-store");
     out.set("x-spooled-filename", encodeURIComponent(filename));
     out.set("x-spooled-ext", extensionFor(format));
-
-    let status = 200;
-    if (range && typeof total === "number") {
-      const start = range.start;
-      const end = range.end ?? total - 1;
-      out.set("content-range", `bytes ${start}-${end}/${total}`);
-      out.set("content-length", String(end - start + 1));
-      out.set("accept-ranges", "bytes");
-      status = 206;
-    } else if (typeof total === "number" && !range) {
-      out.set("content-length", String(total));
-      out.set("accept-ranges", "bytes");
-    }
+    if (opened.contentLength) out.set("content-length", opened.contentLength);
+    if (opened.contentRange) out.set("content-range", opened.contentRange);
+    out.set("accept-ranges", "bytes");
 
     if (request.method === "HEAD") {
-      return new Response(null, { status, headers: out });
+      return new Response(null, { status: opened.status, headers: out });
     }
 
-    return new Response(opened.stream, { status, headers: out });
+    return new Response(opened.stream, { status: opened.status, headers: out });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Download failed.";
     return Response.json({ error: message }, { status: 400 });

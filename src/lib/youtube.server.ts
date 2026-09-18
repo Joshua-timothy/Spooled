@@ -7,6 +7,8 @@ import {
 
 let evalInstalled = false;
 let tubePromise: Promise<Innertube> | null = null;
+let tubeCreatedAt = 0;
+const TUBE_TTL_MS = 8 * 60 * 1000;
 
 function installEval() {
   if (evalInstalled) return;
@@ -14,13 +16,18 @@ function installEval() {
   evalInstalled = true;
 }
 
-async function getTube(): Promise<Innertube> {
+async function getTube(force = false): Promise<Innertube> {
   installEval();
-  if (!tubePromise) {
-    tubePromise = Innertube.create({ retrieve_player: true }).catch((err) => {
-      tubePromise = null;
-      throw err;
-    });
+  if (force || !tubePromise || Date.now() - tubeCreatedAt > TUBE_TTL_MS) {
+    tubePromise = Innertube.create({ retrieve_player: true })
+      .then((tube) => {
+        tubeCreatedAt = Date.now();
+        return tube;
+      })
+      .catch((err) => {
+        tubePromise = null;
+        throw err;
+      });
   }
   return tubePromise;
 }
@@ -85,6 +92,7 @@ export type RawFormat = {
   bitrate: number;
   content_length?: number;
   is_type_otf?: boolean;
+  decipher: (player: unknown) => Promise<string>;
 };
 
 function hasDownloadUrl(format: RawFormat): boolean {
@@ -182,8 +190,8 @@ function collectFormats(info: {
   ];
 }
 
-async function loadInfo(id: string) {
-  const tube = await getTube();
+async function loadInfo(id: string, force = false) {
+  const tube = await getTube(force);
   try {
     const mweb = await tube.getBasicInfo(id, { client: "MWEB" });
     if (collectFormats(mweb as never).some((f) => hasDownloadUrl(f))) return { tube, info: mweb };
@@ -192,6 +200,16 @@ async function loadInfo(id: string) {
   }
   const info = await tube.getBasicInfo(id);
   return { tube, info };
+}
+
+async function fetchMedia(url: string, range?: { start: number; end?: number }) {
+  const headers: Record<string, string> = { accept: "*/*" };
+  if (range) headers.range = `bytes=${range.start}-${range.end ?? ""}`;
+  return fetch(url, { headers, redirect: "follow" });
+}
+
+function streamBlocked(status: number) {
+  return !Number.isFinite(status) || (status !== 200 && status !== 206);
 }
 
 export async function fetchVideoInfo(rawUrl: string): Promise<VideoInfoPayload> {
@@ -234,21 +252,46 @@ export async function openFormatStream(
 ) {
   if (!extractVideoId(videoId)) throw new Error("Invalid video id.");
 
-  const { info } = await loadInfo(videoId);
-  const status = info.playability_status?.status;
-  const reason = info.playability_status?.reason;
-  const blocked = playabilityMessage(status, reason);
-  if (blocked) throw new Error(blocked);
+  const tryOnce = async (force: boolean) => {
+    const { tube, info } = await loadInfo(videoId, force);
+    const status = info.playability_status?.status;
+    const reason = info.playability_status?.reason;
+    const blocked = playabilityMessage(status, reason);
+    if (blocked) throw new Error(blocked);
 
-  const format = collectFormats(info as never).find((item) => item.itag === itag);
-  if (!format || !hasDownloadUrl(format)) {
-    throw new Error("That quality is no longer available. Fetch the video again.");
+    const format = collectFormats(info as never).find((item) => item.itag === itag);
+    if (!format || !hasDownloadUrl(format)) {
+      throw new Error("That quality is no longer available. Fetch the video again.");
+    }
+
+    const mediaUrl = await format.decipher(tube.session.player);
+    const response = await fetchMedia(mediaUrl, range);
+    return {
+      response,
+      format,
+      title: info.basic_info?.title ?? "video",
+    };
+  };
+
+  let opened = await tryOnce(false);
+  if (streamBlocked(opened.response.status)) {
+    await opened.response.body?.cancel().catch(() => undefined);
+    opened = await tryOnce(true);
+  }
+  if (streamBlocked(opened.response.status)) {
+    throw new Error("YouTube blocked this file stream. Try another quality, or a different video.");
+  }
+  if (!opened.response.body) {
+    throw new Error("No file stream was returned.");
   }
 
-  const stream = await info.download({ itag, range });
   return {
-    stream,
-    format,
-    title: info.basic_info?.title ?? "video",
+    stream: opened.response.body,
+    format: opened.format,
+    title: opened.title,
+    status: opened.response.status,
+    contentType: opened.response.headers.get("content-type"),
+    contentLength: opened.response.headers.get("content-length"),
+    contentRange: opened.response.headers.get("content-range"),
   };
 }

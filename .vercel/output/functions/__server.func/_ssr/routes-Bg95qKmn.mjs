@@ -9,7 +9,7 @@ import { n as TSS_SERVER_FUNCTION, r as getServerFnById, t as createServerFn } f
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-Bzq7IL5P.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-Bg95qKmn.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -146,7 +146,7 @@ function rememberVideo(info) {
 function clearRecent() {
 	window.localStorage.removeItem(KEY);
 }
-var EXAMPLE_URL = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+var EXAMPLE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 function errorMessage(error) {
 	if (error instanceof Error && error.message) return error.message;
 	return "Could not fetch that video.";
@@ -182,6 +182,7 @@ function Downloader() {
 	const [previewing, setPreviewing] = (0, import_react.useState)(false);
 	const [download, setDownload] = (0, import_react.useState)(null);
 	const [doneItag, setDoneItag] = (0, import_react.useState)(null);
+	const [showHighRes, setShowHighRes] = (0, import_react.useState)(false);
 	const abortRef = (0, import_react.useRef)(null);
 	(0, import_react.useEffect)(() => {
 		setRecent(readRecent());
@@ -203,6 +204,7 @@ function Downloader() {
 		setPreviewing(false);
 		setDownload(null);
 		setDoneItag(null);
+		setShowHighRes(false);
 		try {
 			const payload = await lookupVideo({ data: { url: trimmed } });
 			setInfo(payload);
@@ -453,27 +455,44 @@ function Downloader() {
 							"audio",
 							"video"
 						].map((kind) => {
-							const formats = info.formats.filter((format) => format.kind === kind);
-							if (!formats.length) return null;
+							const all = info.formats.filter((format) => format.kind === kind);
+							const hiddenHighRes = kind === "video" && !showHighRes ? all.filter((format) => (format.height ?? 0) > 1080) : [];
+							const formats = kind === "video" && !showHighRes ? all.filter((format) => (format.height ?? 0) <= 1080) : all;
+							if (!formats.length && !hiddenHighRes.length) return null;
 							const meta = kindMeta(kind);
 							return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 								className: "flex flex-col gap-3",
-								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
-									className: "text-sm font-medium text-foreground",
-									children: meta.title
-								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-									className: "mt-1 text-xs leading-relaxed text-muted-foreground",
-									children: meta.hint
-								})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
-									className: "flex flex-col gap-2",
-									children: formats.map((format) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormatRow, {
-										format,
-										busy: download?.itag === format.itag,
-										done: doneItag === format.itag,
-										progress: download?.itag === format.itag ? download : null,
-										onSave: () => void saveFormat(format)
-									}, format.itag))
-								})]
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+										className: "text-sm font-medium text-foreground",
+										children: meta.title
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+										className: "mt-1 text-xs leading-relaxed text-muted-foreground",
+										children: meta.hint
+									})] }),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+										className: "flex flex-col gap-2",
+										children: formats.map((format) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormatRow, {
+											format,
+											busy: download?.itag === format.itag,
+											done: doneItag === format.itag,
+											progress: download?.itag === format.itag ? download : null,
+											onSave: () => void saveFormat(format)
+										}, format.itag))
+									}),
+									kind === "video" && hiddenHighRes.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+										type: "button",
+										variant: "ghost",
+										size: "sm",
+										className: "self-start",
+										onClick: () => setShowHighRes(true),
+										children: [
+											"Show ",
+											hiddenHighRes.length,
+											" higher resolutions"
+										]
+									}) : null
+								]
 							}, kind);
 						})
 					})
@@ -528,7 +547,7 @@ function Downloader() {
 						setUrl(EXAMPLE_URL);
 						fetchInfo(EXAMPLE_URL);
 					},
-					children: "Try Big Buck Bunny"
+					children: "Try a sample clip"
 				})]
 			}),
 			recent.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {

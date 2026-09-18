@@ -1,6 +1,6 @@
 import { n as extractVideoId } from "./youtube-BeaFxecg.mjs";
 import { n as Platform, t as Innertube } from "../_libs/youtubei.js.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/youtube.server-CoYXWsVI.js
+//#region node_modules/.nitro/vite/services/ssr/assets/youtube.server-BSzz7Zri.js
 var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
 	let target = {};
@@ -12,26 +12,24 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 var youtube_server_exports = /* @__PURE__ */ __exportAll({
-	STREAM_HEADERS: () => STREAM_HEADERS,
 	fetchVideoInfo: () => fetchVideoInfo,
 	openFormatStream: () => openFormatStream
 });
-var STREAM_HEADERS = {
-	accept: "*/*",
-	origin: "https://www.youtube.com",
-	referer: "https://www.youtube.com",
-	DNT: "?1"
-};
 var evalInstalled = false;
 var tubePromise = null;
+var tubeCreatedAt = 0;
+var TUBE_TTL_MS = 48e4;
 function installEval() {
 	if (evalInstalled) return;
 	Platform.shim.eval = async (data) => new Function(data.output)();
 	evalInstalled = true;
 }
-async function getTube() {
+async function getTube(force = false) {
 	installEval();
-	if (!tubePromise) tubePromise = Innertube.create({ retrieve_player: true }).catch((err) => {
+	if (force || !tubePromise || Date.now() - tubeCreatedAt > TUBE_TTL_MS) tubePromise = Innertube.create({ retrieve_player: true }).then((tube) => {
+		tubeCreatedAt = Date.now();
+		return tube;
+	}).catch((err) => {
 		tubePromise = null;
 		throw err;
 	});
@@ -100,7 +98,7 @@ function pickFormats(raw) {
 	for (const itag of preferredAudioItags) {
 		const format = audioByItag.get(itag);
 		if (!format) continue;
-		audio.push(toPayload(format, "audio", audioLabel(format.audio_quality, format.bitrate), itag === 140));
+		audio.push(toPayload(format, "audio", audioLabel(format.audio_quality, format.bitrate), false));
 	}
 	const result = [
 		...combined,
@@ -137,8 +135,8 @@ function thumbnailUrl(info) {
 function collectFormats(info) {
 	return [...info.streaming_data?.formats ?? [], ...info.streaming_data?.adaptive_formats ?? []];
 }
-async function loadInfo(id) {
-	const tube = await getTube();
+async function loadInfo(id, force = false) {
+	const tube = await getTube(force);
 	try {
 		const mweb = await tube.getBasicInfo(id, { client: "MWEB" });
 		if (collectFormats(mweb).some((f) => hasDownloadUrl(f))) return {
@@ -150,6 +148,17 @@ async function loadInfo(id) {
 		tube,
 		info: await tube.getBasicInfo(id)
 	};
+}
+async function fetchMedia(url, range) {
+	const headers = { accept: "*/*" };
+	if (range) headers.range = `bytes=${range.start}-${range.end ?? ""}`;
+	return fetch(url, {
+		headers,
+		redirect: "follow"
+	});
+}
+function streamBlocked(status) {
+	return !Number.isFinite(status) || status !== 200 && status !== 206;
 }
 async function fetchVideoInfo(rawUrl) {
 	const id = extractVideoId(rawUrl);
@@ -175,20 +184,37 @@ async function fetchVideoInfo(rawUrl) {
 		formats
 	};
 }
-async function openFormatStream(videoId, itag) {
+async function openFormatStream(videoId, itag, range) {
 	if (!extractVideoId(videoId)) throw new Error("Invalid video id.");
-	const { tube, info } = await loadInfo(videoId);
-	const status = info.playability_status?.status;
-	const reason = info.playability_status?.reason;
-	const blocked = playabilityMessage(status, reason);
-	if (blocked) throw new Error(blocked);
-	const format = collectFormats(info).find((item) => item.itag === itag);
-	if (!format || !hasDownloadUrl(format)) throw new Error("That quality is no longer available. Fetch the video again.");
+	const tryOnce = async (force) => {
+		const { tube, info } = await loadInfo(videoId, force);
+		const status = info.playability_status?.status;
+		const reason = info.playability_status?.reason;
+		const blocked = playabilityMessage(status, reason);
+		if (blocked) throw new Error(blocked);
+		const format = collectFormats(info).find((item) => item.itag === itag);
+		if (!format || !hasDownloadUrl(format)) throw new Error("That quality is no longer available. Fetch the video again.");
+		return {
+			response: await fetchMedia(await format.decipher(tube.session.player), range),
+			format,
+			title: info.basic_info?.title ?? "video"
+		};
+	};
+	let opened = await tryOnce(false);
+	if (streamBlocked(opened.response.status)) {
+		await opened.response.body?.cancel().catch(() => void 0);
+		opened = await tryOnce(true);
+	}
+	if (streamBlocked(opened.response.status)) throw new Error("YouTube blocked this file stream. Try another quality, or a different video.");
+	if (!opened.response.body) throw new Error("No file stream was returned.");
 	return {
-		url: await format.decipher(tube.session.player),
-		format,
-		title: info.basic_info?.title ?? "video",
-		headers: STREAM_HEADERS
+		stream: opened.response.body,
+		format: opened.format,
+		title: opened.title,
+		status: opened.response.status,
+		contentType: opened.response.headers.get("content-type"),
+		contentLength: opened.response.headers.get("content-length"),
+		contentRange: opened.response.headers.get("content-range")
 	};
 }
 //#endregion
